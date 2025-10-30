@@ -23,6 +23,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
+    console.log('Calling ActiveCampaign with:', { email, firstName });
+
     // Call ActiveCampaign
     const acResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contacts', {
       method: 'POST',
@@ -38,15 +40,21 @@ export default async function handler(req, res) {
       })
     });
 
-    const acData = await acResponse.json();
-
+    // Check status BEFORE parsing JSON
     if (!acResponse.ok) {
-      console.error('ActiveCampaign error:', acData);
-      return res.status(acResponse.status).json({
+      const errorText = await acResponse.text();
+      console.error('ActiveCampaign error:', acResponse.status, errorText);
+      return res.status(500).json({
         error: 'ActiveCampaign API error',
-        details: acData
+        status: acResponse.status,
+        details: errorText
       });
     }
+
+    // Parse JSON only if successful
+    const acData = await acResponse.json();
+
+    console.log('ActiveCampaign success:', acData);
 
     // Success
     return res.status(200).json({
@@ -56,7 +64,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Unexpected error:', error);
     return res.status(500).json({
       error: 'Server error',
       message: error.message
