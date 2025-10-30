@@ -23,10 +23,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    console.log('Calling ActiveCampaign with:', { email, firstName });
+    console.log('Starting ActiveCampaign process for:', email);
 
-    // Call ActiveCampaign
-    const acResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contacts', {
+    // STEP 1: Create Contact
+    const createContactResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contacts', {
       method: 'POST',
       headers: {
         'Api-Token': process.env.AC_API_KEY,
@@ -40,27 +40,62 @@ export default async function handler(req, res) {
       })
     });
 
-    // Check status BEFORE parsing JSON
-    if (!acResponse.ok) {
-      const errorText = await acResponse.text();
-      console.error('ActiveCampaign error:', acResponse.status, errorText);
+    // Check if contact creation succeeded
+    if (!createContactResponse.ok) {
+      const errorText = await createContactResponse.text();
+      console.error('Contact creation error:', createContactResponse.status, errorText);
       return res.status(500).json({
-        error: 'ActiveCampaign API error',
-        status: acResponse.status,
+        error: 'Failed to create contact',
+        status: createContactResponse.status,
         details: errorText
       });
     }
 
-    // Parse JSON only if successful
-    const acData = await acResponse.json();
+    const contactData = await createContactResponse.json();
+    const contactId = contactData.contact.id;
 
-    console.log('ActiveCampaign success:', acData);
+    console.log('Contact created with ID:', contactId);
 
-    // Success
+    // STEP 2: Add Contact to List 9
+    const addToListResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contactLists', {
+      method: 'POST',
+      headers: {
+        'Api-Token': process.env.AC_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contactList: {
+          list: 9,              // YOUR LIST ID
+          contact: contactId,   // Contact ID from Step 1
+          status: 1             // 1 = Active subscription
+        }
+      })
+    });
+
+    // Check if list subscription succeeded
+    if (!addToListResponse.ok) {
+      const errorText = await addToListResponse.text();
+      console.error('List subscription error:', addToListResponse.status, errorText);
+      
+      // Contact was created but not added to list - still return partial success
+      return res.status(200).json({
+        success: true,
+        contactId: contactId,
+        warning: 'Contact created but could not be added to list',
+        listError: errorText
+      });
+    }
+
+    const listData = await addToListResponse.json();
+
+    console.log('Contact added to list successfully');
+
+    // SUCCESS - Both steps completed!
     return res.status(200).json({
       success: true,
-      contactId: acData.contact?.id,
-      message: 'Contact created successfully'
+      contactId: contactId,
+      listSubscriptionId: listData.contactList?.id,
+      message: 'Contact created and added to list successfully'
     });
 
   } catch (error) {
