@@ -1,9 +1,10 @@
 export default async function handler(req, res) {
-  // CORS headers - for FlutterFlow to call this
+  // CORS headers - Allow FlutterFlow to call this
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -21,7 +22,7 @@ export default async function handler(req, res) {
 
     console.log('Creating contact:', email);
 
-    // STEP 1: Create Contact - NO Content-Type header to AC
+    // STEP 1: Create Contact with custom fields
     const createContactResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contacts', {
       method: 'POST',
       headers: {
@@ -30,7 +31,20 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contact: {
           email: email,
-          first_name: firstName || ''  // ← USING first_name AS YOU SPECIFIED
+          fieldValues: [
+            {
+              field: "3",
+              value: firstName || ""
+            },
+            {
+              field: "4",
+              value: breachCount || "0"
+            },
+            {
+              field: "5",
+              value: breachNames || "none"
+            }
+          ]
         }
       })
     });
@@ -47,10 +61,9 @@ export default async function handler(req, res) {
 
     const contactData = await createContactResponse.json();
     const contactId = contactData.contact.id;
-
     console.log('Contact created:', contactId);
 
-    // STEP 2: Add to List - NO Content-Type header to AC
+    // STEP 2: Subscribe to List 9
     const addToListResponse = await fetch('https://idpmgroup.api-us1.com/api/3/contactLists', {
       method: 'POST',
       headers: {
@@ -67,25 +80,29 @@ export default async function handler(req, res) {
 
     if (!addToListResponse.ok) {
       const errorText = await addToListResponse.text();
-      console.error('List error:', addToListResponse.status, errorText);
+      console.error('List subscription error:', addToListResponse.status, errorText);
       
+      // Contact created, but list subscription failed
       return res.status(200).json({
         success: true,
         contactId: contactId,
-        warning: 'Contact created but not added to list'
+        warning: 'Contact created but list subscription failed'
       });
     }
 
     const listData = await addToListResponse.json();
+    console.log('List subscription successful');
 
+    // Return success
     return res.status(200).json({
       success: true,
       contactId: contactId,
-      listSubscriptionId: listData.contactList?.id
+      listSubscriptionId: listData.contactList?.id,
+      message: 'Contact created and subscribed successfully'
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Server error:', error);
     return res.status(500).json({
       error: 'Server error',
       message: error.message
