@@ -1,4 +1,4 @@
- const AC_API = 'https://idpmgroup.api-us1.com/api/3'                          
+const AC_API = 'https://idpmgroup.api-us1.com/api/3'                          
   const STATS_EMAIL = 'scanner-stats@secureme.internal'                         
                                                                                 
   async function getStatsContact(apiKey) {                                      
