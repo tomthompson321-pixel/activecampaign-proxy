@@ -1,20 +1,27 @@
-const AC_API = 'https://idpmgroup.api-us1.com/api/3';                         
-  const STATS_EMAIL = 'scanner-stats@secureme.internal';
-  const STATS_CONTACT_ID = '22065';                                             
+const AC_API = 'https://idpmgroup.api-us1.com/api/3';
   const STATS_NOTE_ID = '103';                                                  
-                                                                                
+   
   function getArizonaDate() {                                                   
     var now = new Date();
-    var az = new Date(now.toLocaleString('en-US', { timeZone: 'America/Phoenix'
-  }));
+    var az = new Date(now.toLocaleString('en-US', { timeZone: 'America/Phoenix' 
+  }));       
     return az.getFullYear() + '-' + String(az.getMonth() + 1).padStart(2, '0') +
    '-' + String(az.getDate()).padStart(2, '0');                                 
   }
                                                                                 
-  export default async function handler(req, res) {                             
+  function decodeNote(raw) {
+    if (!raw) return {};
+    var decoded = raw.replace(/&quot;/g, '"').replace(/&amp;/g,
+  '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');                             
+    try { return JSON.parse(decoded); } catch(e) {}
+    try { return JSON.parse(raw); } catch(e) {}                                 
+    return {};                                                                  
+  }
+                                                                                
+  export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');        
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');              
     if (req.method === 'OPTIONS') return res.status(200).end();
     var AC_KEY = process.env.AC_API_KEY;                                        
     var today = getArizonaDate();
@@ -24,9 +31,8 @@ const AC_API = 'https://idpmgroup.api-us1.com/api/3';
         var noteResp = await fetch(AC_API + '/notes/' + STATS_NOTE_ID, {
   headers: { 'Api-Token': AC_KEY } });                                          
         var noteData = await noteResp.json();
-        var stats = {};                                                         
-        try { stats = JSON.parse(noteData.note.note); } catch(e) {}
-        if (!stats[today]) stats[today] = { views_total: 0, views_us: 0,        
+        var stats = decodeNote(noteData.note.note);                             
+        if (!stats[today]) stats[today] = { views_total: 0, views_us: 0,
   views_ca: 0, views_other: 0 };                                                
         stats[today].views_total = (stats[today].views_total || 0) + 1;
         if (country === 'CA') { stats[today].views_ca = (stats[today].views_ca  
@@ -36,17 +42,16 @@ const AC_API = 'https://idpmgroup.api-us1.com/api/3';
         else { stats[today].views_other = (stats[today].views_other || 0) + 1; }
         await fetch(AC_API + '/notes/' + STATS_NOTE_ID, {                       
           method: 'PUT',
-          headers: { 'Api-Token': AC_KEY, 'Content-Type': 'application/json' }, 
+          headers: { 'Api-Token': AC_KEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ note: { note: JSON.stringify(stats) } })       
         });
         return res.status(200).json({ success: true, today: stats[today] });    
-      }      
+      }                                                                         
       if (req.method === 'GET') {
         var noteResp = await fetch(AC_API + '/notes/' + STATS_NOTE_ID, {        
   headers: { 'Api-Token': AC_KEY } });
-        var noteData = await noteResp.json();                                   
-        var stats = {};
-        try { stats = JSON.parse(noteData.note.note); } catch(e) {}             
+        var noteData = await noteResp.json();
+        var stats = decodeNote(noteData.note.note);                             
         var tv = stats[today] || { views_total: 0, views_us: 0, views_ca: 0,
   views_other: 0 };                                                             
         var listResp = await fetch(AC_API + '/contacts?listid=9&limit=1', {
